@@ -87,7 +87,11 @@ func (t *SimpleChaincode) write(stub shim.ChaincodeStubInterface, args []string)
 	}
 
 	key = args[0] //rename for funsies
-	value = args[1]
+	
+	//value = args[1] //This line was commented to support IBM FastStart 2017 lab sessions
+	// The following code is added to support IBM FastStart 2017 lab sessions
+	value = determineGreeting(args[1]) //Call the Decision Service to retreive the right greeting for the time of the day
+	
 	err = stub.PutState(key, []byte(value)) //write the variable into the chaincode state
 	if err != nil {
 		return nil, err
@@ -112,4 +116,51 @@ func (t *SimpleChaincode) read(stub shim.ChaincodeStubInterface, args []string) 
 	}
 
 	return valAsbytes, nil
+}
+// The following code is added to support IBM FastStart 2017 lab sessions
+func determineGreeting(timeoftheday string) string {
+	//URL to the Decision Service
+	url := "https://brsv2-35307ccf.ng.bluemix.net/DecisionService/rest/BMX/1.0/determineGreeting/1.1"
+	fmt.Println("Decision Service URL:>", url)
+
+	var jsonStr = []byte(`{"theGreeting": {"timeoftheday": "`+timeoftheday +`","greetingtext": "string" },"__DecisionID__": "string"}`)
+	
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	
+	//Use basic authentication to access the Decision Service
+	req.Header.Set("Authorization", "Basic cmVzQWRtaW46MWppYTJtcnNlZzN6cw==")
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("response Status:", resp.Status)
+	fmt.Println("response Headers:", resp.Header)
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println("response Body:", string(body))
+	
+	//Extract greeting text out of the response received from the Decision Service
+	return extractGreeting(string(body), `"greetingtext":`, "}")
+}
+
+func extractGreeting(value string, a string, b string) string {
+    // Get substring between two strings.
+    posFirst := strings.Index(value, a)
+    if posFirst == -1 {
+	return ""
+    }
+    posLast := strings.Index(value, b)
+    if posLast == -1 {
+	return ""
+    }
+    posFirstAdjusted := posFirst + len(a)
+    if posFirstAdjusted >= posLast {
+	return ""
+    }
+    return value[posFirstAdjusted:posLast]
 }
